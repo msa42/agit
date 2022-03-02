@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+AUTHORIZED_USER="user"
+
+if [ "$HOME" != "/home/$AUTHORIZED_USER" ]; then
+  echo "You are not authorized to act on this repository."
+  exit 1
+fi

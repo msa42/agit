@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# (C) 2022 Theodore Huang <msa42@ctemplar.com>
+#
+# This program is free software: you can redistribute it and/or modify it under the terms of
+# the GNU General Public License as published by the Free Software Foundation,
+# either version 3 of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with this program.
+# If not, see <https://www.gnu.org/licenses/>.
+#
+set -euo pipefail
+
+here=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+
+GIT_DEFAULT_BRANCH="main"
+GIT_EDITOR="vim"
+GIT_EMAIL="msa42@ctemplar.com"
+GIT_SIGNINGKEY="6DCF8B4BF706337A"
+GIT_USERNAME="msa42"
+SSH_CONFIG_FILE="$HOME/.ssh/config"
+
+hooks_init() {
+  rm -rf ./.git/hooks
+  ln -s "$here/hooks" ./.git/hooks
+}
+
+package_setup() {
+  if ! command -v "$1" &> /dev/null
+  then
+    sudo apt-get install "$1"
+  fi
+}
+
+usage_print() {
+  echo "usage: agit [setup <ssh_private_key>|clone <repository>|init <repository>]"
+  echo "       agit setup ~/.ssh/id_rsa"
+  echo "       agit clone msa42/pwman"
+  echo "       agit init msa42/pwman"
+}
+
+if [ -z ${1+x} ]; then
+  usage_print
+  exit 1
+fi
+
+case $1 in
+  clone)
+    if [ -z ${2+x} ]; then
+      usage_print
+      exit 1
+    fi
+    REPOSITORY=$2
+
+    if [ -z "$(ls -A \./)" ]; then
+      git clone "git@agithub:$REPOSITORY" .
+      hooks_init
+    else
+      echo "error: Current directory is not empty."
+      exit 1
+    fi
+    ;;
+  init)
+    if [ -z ${2+x} ]; then
+      usage_print
+      exit 1
+    fi
+    REPOSITORY=$2
+
+    if [ ! -d .git ]; then
+      git init
+      git remote add origin "git@agithub:$REPOSITORY"
+      hooks_init
+    else
+      echo "error: .git directory already exists."
+      exit 1
+    fi
+    ;;
+  setup)
+    if [ -z ${2+x} ]; then
+      usage_print
+      exit 1
+    fi
+
+    SSH_PRIVATE_KEY=$2
+
+    if [[ ! -f "$SSH_CONFIG_FILE" ]]; then
+      mkdir -p "$(dirname "${SSH_CONFIG_FILE%/}")"
+      touch "$SSH_CONFIG_FILE"
+    fi
+
+    if ! grep -q -F "Host agithub" "$SSH_CONFIG_FILE"; then
+      { echo "Host agithub";
+        echo "    Hostname        github.com";
+        echo "    IdentityFile    $SSH_PRIVATE_KEY";
+        echo "    IdentitiesOnly yes";
+      } >> "$SSH_CONFIG_FILE"
+    fi
+
+    git config --global commit.gpgsign true
+    git config --global core.editor "$GIT_EDITOR"
+    git config --global init.defaultBranch "$GIT_DEFAULT_BRANCH"
+    git config --global user.email "$GIT_EMAIL"
+    git config --global user.name "$GIT_USERNAME"
+    git config --global user.signingkey "$GIT_SIGNINGKEY"
+
+    echo "agit: ready"
+    ;;
+  *)
+    echo "agit: $1 is not a valid command."
+    ;;
+esac
